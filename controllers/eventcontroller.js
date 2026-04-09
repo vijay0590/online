@@ -42,7 +42,28 @@ const createEvent=async(req,res)=>{
 }
 const getEvents=async(req,res)=>{
     try{
-        const events=await Event.find({status:"approved"})
+        const {search,location,minPrice,maxPrice,date}=req.query;
+        let query={status:"approved"};
+        //search by title
+        if(search){
+            query.title={$regex :search, $options:"i"}
+        }
+        //filter by location
+        if(location){
+            query.location={$regex:location,$options:"i"}
+        }
+        //search by price
+        if(minPrice||maxPrice){
+            query.price={};
+            if(minPrice) query.price.$gte=Number(minPrice)
+           if(maxPrice) query.price.$lte=Number(maxPrice)
+        }
+     //filter by date
+     if(date){
+        query.date=new Date(date)
+     }
+
+        const events=await Event.find(query)
         .populate("organiser","name email")
         .sort({createdAt:-1});
         //response
