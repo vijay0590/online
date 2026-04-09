@@ -81,5 +81,26 @@ const updateEvent=async(req,res)=>{
 
     }
 
+};
+const deleteEvent=async(req,res)=>{
+    try{
+        const event= await Event.findById(req.params.id)
+        if(!event){
+            return res.status(404).json({message:"not event found"})
+        }
+       // check ownership or admin
+       if(
+        event.organiser.toString() !== req.user._id.toString() &&
+        req.role.user !== "admin"
+       ){
+        return res.status(403).json({message:"not authorised to delete this event"})
+       }
+       await event.deleteOne();
+       res.json({message:"event deleted succesfully"})
+
+    }catch(error){
+        res.status(500).json({message:error.message})
+    }
 }
-module.exports={createEvent, getEvents,updateEvent};
+
+module.exports={createEvent, getEvents,updateEvent,deleteEvent};
