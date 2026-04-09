@@ -1,0 +1,85 @@
+const Event=require('../models/Event');
+
+//create event
+const createEvent=async(req,res)=>{
+    try{
+        const {
+            title,
+            description,
+            date,
+            time,
+            location,
+            category,
+            price,
+            images
+        }=req.body;
+        if(!title || !description ||!date ||!time ||!location ||!price){
+            return res.status(400).json({message:"All fields required"})
+        }
+        //create event
+        const event=await Event.create({
+
+             title,
+            description,
+            date,
+            time,
+            location,
+            category,
+            price,
+            images,
+            organiser:req.user._id,
+        });
+        //response
+        res.status(200).json({message:"event created sucessfully(pending approval)",
+            event,
+        });
+
+    }catch(error){
+        res.status(500).json({message:error.message})
+    }
+
+
+}
+const getEvents=async(req,res)=>{
+    try{
+        const events=await Event.find({status:"approved"})
+        .populate("organiser","name email")
+        .sort({createdAt:-1});
+        //response
+        res.status(200).json({count:events.length,events})
+
+        
+    }catch(error){
+        res.status(500).json({message:error.message})
+    }
+}
+
+//update event
+const updateEvent=async(req,res)=>{
+    try{
+        const event =await Event.findById(req.params.id)
+
+        if(!event){
+            return res.status(404).json({message:"No event fount"})
+            //check ownership or admin
+            if(
+                event.organiser.toString() !==req.user._id.tostring() &&
+                req.user.role !== "admin"
+            )
+            res.status(403).json({message:"not authorized to update this event"})
+        }
+        //updated event
+        const updatedEvent=await Event.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            {new:true}
+        )
+        res.json({message:"updated event successfully",event:updatedEvent})
+
+    }catch(error){
+        res.status(500).json({message:error.message})
+
+    }
+
+}
+module.exports={createEvent, getEvents,updateEvent};
