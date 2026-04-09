@@ -29,6 +29,15 @@ const eventSchema=new mongoose.Schema(
             type:String,
             default:"general"
         },
+        schedule:[
+           { 
+            title:String,
+            speaker:String,
+            startTime:String,
+            endTime:String,
+           },
+
+    ],
         price:{
             type:Number,
             required:true
@@ -54,4 +63,4 @@ const eventSchema=new mongoose.Schema(
 
     },{timeatamps:true}
 );
-module.exports=mongoose.model("event",eventSchema);
+module.exports=mongoose.model("Event",eventSchema);

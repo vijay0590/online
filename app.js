@@ -2,6 +2,8 @@ const express=require("express");
 const cors=require('cors');
 const authRoutes=require("./routes/authRoutes")
 const eventRoutes = require("./routes/eventRoutes");
+const ticketRoutes = require("./routes/ticketRoutes");
+const analyticsRoutes=require("./routes/analyticsRoutes");
 
 
 
@@ -13,6 +15,8 @@ app.use(cors());
 
 app.use("/api/auth",authRoutes);
 app.use("/api/events",eventRoutes)
+app.use("/api/tickets",ticketRoutes)
+app.use("/api/analytics",analyticsRoutes)
 
 
 

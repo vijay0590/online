@@ -101,6 +101,27 @@ const deleteEvent=async(req,res)=>{
     }catch(error){
         res.status(500).json({message:error.message})
     }
+};
+const updateEventSchedule=async(req,res)=>{
+    try{
+        const {schedule} = req.body
+        const event=await Event.findById(req.param.id)
+        if(!event){
+            return res.status(400).jao({message:"no event found"})
+        }
+        //chech ownership/admin
+        if(event.organiser.toString() !== req.user._id &&
+         req.user.role !== "admin"){
+           return  res.status(403).json({meassage:"not authorised"})
+         }
+         event.schedule=schedule;
+         await event.save();
+         res.json({message:"event schedule updated",event})
+         
+    }catch(error){
+        res.status(500).json({message:eror.message})
+    }
 }
 
-module.exports={createEvent, getEvents,updateEvent,deleteEvent};
+
+module.exports={createEvent, getEvents,updateEvent,deleteEvent,updateEventSchedule};

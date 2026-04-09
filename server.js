@@ -3,6 +3,9 @@ const mongoose=require("mongoose");
 const {MONGODB_URI, PORT}=require("./config/config")
 const app=require("./app")
 
+require("./models/User");
+require("./models/Event");
+require("./models/Ticket");
 
 mongoose.connect
     (MONGODB_URI)
