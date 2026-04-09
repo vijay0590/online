@@ -4,6 +4,7 @@ const authRoutes=require("./routes/authRoutes")
 const eventRoutes = require("./routes/eventRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
 const analyticsRoutes=require("./routes/analyticsRoutes");
+const adminRoutes=require("./routes/adminRoutes");
 
 
 
@@ -17,6 +18,7 @@ app.use("/api/auth",authRoutes);
 app.use("/api/events",eventRoutes)
 app.use("/api/tickets",ticketRoutes)
 app.use("/api/analytics",analyticsRoutes)
+app.use("/api/admin",adminRoutes)
 
 
 
