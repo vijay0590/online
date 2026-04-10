@@ -14,6 +14,7 @@ const createEvent=async(req,res)=>{
             ticketTypes,
             images
         }=req.body;
+            const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
         if(!title || !description ||!date ||!time ||!location ||!ticketTypes){
             return res.status(400).json({message:"All fields required"})
         }
@@ -27,9 +28,10 @@ const createEvent=async(req,res)=>{
             location,
             category,
             ticketTypes,
-            images,
+            images: imagePath ? [imagePath] : [],
             organiser:req.user._id,
         });
+
         //response
         res.status(200).json({message:"event created sucessfully(pending approval)",
             event,

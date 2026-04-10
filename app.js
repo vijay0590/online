@@ -5,6 +5,7 @@ const eventRoutes = require("./routes/eventRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
 const analyticsRoutes=require("./routes/analyticsRoutes");
 const adminRoutes=require("./routes/adminRoutes");
+const userRoutes=require("./routes/userRoutes")
 
 
 
@@ -19,6 +20,9 @@ app.use("/api/events",eventRoutes)
 app.use("/api/tickets",ticketRoutes)
 app.use("/api/analytics",analyticsRoutes)
 app.use("/api/admin",adminRoutes)
+app.use("/api/users",userRoutes)
+//img uploads
+app.use("/uploads",express.static("uploads"))
 
 
 
@@ -29,7 +33,7 @@ app.get("/",(req,res)=>{
 
 //error handleing
 app.use((err,req,res,next)=>{
-    res.status(500).json({message:error.message})
+    res.status(500).json({message:err.message})
 
 })
 
