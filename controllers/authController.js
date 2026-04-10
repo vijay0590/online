@@ -52,7 +52,7 @@ const authController={
             //Find user
             const user=await User.findOne({email});
             if(!user){
-                return res.status(500).json({message:"Invalid credentials",error:err.message});
+                return res.status(500).json({message:"Invalid credentials"});
 
             }
             //compare password

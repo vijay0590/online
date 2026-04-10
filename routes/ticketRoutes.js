@@ -1,6 +1,6 @@
 const express =require('express');
 const router =express.Router();
-const {bookTicket,getMyTickets,confirmPayment,cancelTicket}=require("../controllers/ticketController")
+const {bookTicket,getMyTickets,confirmPayment,cancelTicket,transferTicket}=require("../controllers/ticketController")
 const {protect}=require("../middleware/auth")
 
 //book ticket login user
@@ -13,6 +13,8 @@ router.get("/my",protect,getMyTickets);
 router.post("/pay",protect,confirmPayment)
 //cancel ticket
 router.delete("/:id",protect,cancelTicket)
+//transfer ticket
+router.put("/transfer",protect,transferTicket)
 
 module.exports=router;
 

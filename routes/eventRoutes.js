@@ -1,6 +1,6 @@
 const express= require('express');
 const router=express.Router();
-const {createEvent,getEvents,updateEvent,deleteEvent,updateEventSchedule}=require("../controllers/eventController")
+const {createEvent,getEvents,updateEvent,deleteEvent,updateEventSchedule,getEventAttendees}=require("../controllers/eventController")
 const {protect,authorizeRoles}=require("../middleware/auth");
 //create event
 router.post("/",protect,authorizeRoles("organiser"),createEvent);
@@ -12,6 +12,8 @@ router.put("/:id",protect,updateEvent)
 router.delete("/:id",protect,deleteEvent)
 //update event schedule
 router.put("/:id/schedule",protect,updateEventSchedule);
+//get event attendees
+router.get("/:id/attendees",protect,authorizeRoles("admin","organiser"),getEventAttendees)
 
 
 module.exports=router;

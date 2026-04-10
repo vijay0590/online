@@ -1,5 +1,6 @@
 const Ticket=require("../models/Ticket");
 const Event=require("../models/Event");
+const User=require("../models/User")
 //book ticket
 const bookTicket=async(req,res)=>{
     try{
@@ -17,8 +18,15 @@ const bookTicket=async(req,res)=>{
      if(event.status !== "approved"){
         return res.status(400).json({message:"event not available for booking"})
      }
+     //find selected ticket type
+     const selectedType= event.ticketTypes.find(
+        (t)=>t.type===ticketType
+     )
+       if(!selectedType){
+        return res.status(404).json({message:"invalid ticket type"})
+       }
      //total price
-     const totalPrice=event.price*quantity;
+     const totalPrice=selectedType.price*quantity;
      //create ticket
      const ticket=await Ticket.create({
         user:req.user._id,
@@ -103,4 +111,33 @@ const cancelTicket = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-module.exports = { bookTicket,getMyTickets,confirmPayment, cancelTicket };
+
+//transfer ticket
+const transferTicket=async(req,res)=>{
+    try{
+        const{ticketId,newUserEmail}=req.body;
+    
+    //find ticket
+    const ticket=await Ticket.findById(ticketId)
+    if(!ticket){
+        return res.status(400).json(({message:"no ticket found"}))
+    }
+    //check ownership
+   if(ticket.user.toString()!==req.user._id.toString()){
+    return res.status(403).json({message:"not authorised"})
+   }
+   //find new user
+   const newUser=await User.findOne({email:newUserEmail})
+   if(!newUser){
+    return res.status(400).json({message:"no user found"})
+   }
+   //transfer ticket
+   ticket.user=newUser._id
+   await ticket.save();
+   res.json({message:"ticket transferred successfully,",ticket})
+   }catch(error){
+res.status(500).json({message:error.message})
+   }
+
+}
+module.exports = { bookTicket,getMyTickets,confirmPayment, cancelTicket ,transferTicket};

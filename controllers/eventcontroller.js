@@ -1,4 +1,5 @@
 const Event=require('../models/Event');
+const Ticket=require("../models/Ticket")
 
 //create event
 const createEvent=async(req,res)=>{
@@ -10,10 +11,10 @@ const createEvent=async(req,res)=>{
             time,
             location,
             category,
-            price,
+            ticketTypes,
             images
         }=req.body;
-        if(!title || !description ||!date ||!time ||!location ||!price){
+        if(!title || !description ||!date ||!time ||!location ||!ticketTypes){
             return res.status(400).json({message:"All fields required"})
         }
         //create event
@@ -25,7 +26,7 @@ const createEvent=async(req,res)=>{
             time,
             location,
             category,
-            price,
+            ticketTypes,
             images,
             organiser:req.user._id,
         });
@@ -142,7 +143,31 @@ const updateEventSchedule=async(req,res)=>{
     }catch(error){
         res.status(500).json({message:eror.message})
     }
+};
+//get attendees for event
+const getEventAttendees=async(req,res)=>{
+    try{
+        const eventId=req.params.id;
+        const tickets=await Ticket.find({
+            event:eventId,
+            paymentStatus:"completed"
+        })
+        .populate("user" ,"name email")
+        .select("user quantity")
+        const attendees=tickets.map((t)=>({
+            name:t.user.name,
+            email:t.user.email,
+            tickets:t.quantity
+
+        }))
+        res.json({count:attendees.length,attendees})
+    }catch(error){
+        res.status(500).json({message:error.message})
+    }
 }
 
 
-module.exports={createEvent, getEvents,updateEvent,deleteEvent,updateEventSchedule};
+
+
+module.exports={createEvent, getEvents,updateEvent,
+    deleteEvent,updateEventSchedule,getEventAttendees};
