@@ -8,6 +8,9 @@ const authController={
     registerUser:async(req,res)=>{
         try{
             const{name,email,password}=req.body
+            if(!email.includes("@")){
+                return res.json({message:"enter a valid email"})
+            }
              //check all fields
         if(!name || !email || !password){
             return res.status(500).json({message:"required all fields"})
