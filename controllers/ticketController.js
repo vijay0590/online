@@ -1,6 +1,7 @@
 const Ticket=require("../models/Ticket");
 const Event=require("../models/Event");
-const User=require("../models/User")
+const User=require("../models/User");
+const sendEmail=require("../config/sendEmail")
 //book ticket
 const bookTicket=async(req,res)=>{
     try{
@@ -71,7 +72,16 @@ const confirmPayment=async(req,res)=>{
         //update payment status
         ticket.paymentStatus="completed"
         await ticket.save();
+         //send email
+        const user = await User.findById(ticket.user);
+
+         await sendEmail(
+         user.email,
+          "Ticket Confirmation",
+          `Your ticket for event is confirmed. Quantity: ${ticket.quantity}`
+          );
         res.json({message:"payment succesful",ticket,})
+       
 
     }catch(error){
         res.status(500).json({message:error.message})
