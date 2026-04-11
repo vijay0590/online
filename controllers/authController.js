@@ -34,7 +34,8 @@ const authController={
         res.status(200).json({message:"user registerd succesfully",user:{
             id:user._id,
             name:user.name,
-            email:user.email
+            email:user.email,
+            role:user.role
         }})
         } catch(error){
             return res.status(500).json({message:error.message})
@@ -50,18 +51,18 @@ const authController={
             //check fields
             const {email,password}=req.body;
             if(!email || !password){
-                return res.status(500).json({message:"Required all fields",error:err.message});
+                return res.status(400).json({message:"Required all fields"});
             }
             //Find user
             const user=await User.findOne({email});
             if(!user){
-                return res.status(500).json({message:"Invalid credentials"});
+                return res.status(401).json({message:"Invalid credentials"});
 
             }
             //compare password
             const isValidate= await bcrypt.compare(password,user.password);
             if(!isValidate){
-                return res.status(500).json({message:"Invalid credentials",error:error.message});
+                return res.status(401).json({message:"Invalid credentials"});
             }
             //Generate token
             const token=jwt.sign({
@@ -76,7 +77,8 @@ const authController={
             user:{
                 id:user._id,
                 name:user.name,
-                email:user.email
+                email:user.email,
+                role: user.role
                 }
           })
         }catch(error){

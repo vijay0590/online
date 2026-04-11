@@ -3,7 +3,12 @@ const User=require("../models/User");
 const getMyProfile=async(req,res)=>{
     try{
         const user=await User.findById(req.user._id).select("-password");
-        res.json({user});
+        res.json({ user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role  
+            }});
     }catch(error){
         res.status(500).json({message:error.message})
     }
@@ -24,7 +29,8 @@ const updateProfile=async(req,res)=>{
             user:{
                 id:user._id,
                 name:user.name,
-                email:user.email
+                email:user.email,
+                role:user.role
             }
         
             })
