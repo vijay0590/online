@@ -43,6 +43,7 @@ const createEvent=async(req,res)=>{
 
 
 }
+
 const getEvents=async(req,res)=>{
     try{
         const {search,location,minPrice,maxPrice,date}=req.query;
@@ -77,7 +78,19 @@ const getEvents=async(req,res)=>{
         res.status(500).json({message:error.message})
     }
 }
-
+//get event by id
+const getEventById = async (req, res) => {
+    try {
+        const event = await Event.findById(req.params.id.trim())
+            .populate("organiser", "name email");
+        if (!event) {
+            return res.status(404).json({ message: "Event not found" });
+        }
+        res.status(200).json({ event });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
 //update event
 const updateEvent=async(req,res)=>{
     try{
@@ -171,5 +184,5 @@ const getEventAttendees=async(req,res)=>{
 
 
 
-module.exports={createEvent, getEvents,updateEvent,
+module.exports={createEvent, getEvents,getEventById,updateEvent,
     deleteEvent,updateEventSchedule,getEventAttendees};

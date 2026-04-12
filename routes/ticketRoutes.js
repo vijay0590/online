@@ -14,7 +14,7 @@ router.post("/pay",protect,confirmPayment)
 //cancel ticket
 router.delete("/:id",protect,cancelTicket)
 //transfer ticket
-router.put("/transfer",protect,transferTicket)
+router.put("/transfer/:id",protect,transferTicket)
 
 module.exports=router;
 

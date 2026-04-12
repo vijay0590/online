@@ -125,7 +125,8 @@ const cancelTicket = async (req, res) => {
 //transfer ticket
 const transferTicket=async(req,res)=>{
     try{
-        const{ticketId,newUserEmail}=req.body;
+        const ticketId = req.params.id;
+    const { newUserEmail } = req.body;
     
     //find ticket
     const ticket=await Ticket.findById(ticketId)
