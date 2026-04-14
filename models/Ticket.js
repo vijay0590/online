@@ -11,10 +11,12 @@ const ticketSchema= new mongoose.Schema({
         ref:"Event",
         required:true,
     },
-    ticketType:{
-        type:String,
-        default:"general"
-    },
+ticketType: {
+  type: String,
+  enum: ["general", "vip"], 
+  default: "general",
+  required: true
+},
     quantity:{
         type:Number,
         required:true,
@@ -22,6 +24,7 @@ const ticketSchema= new mongoose.Schema({
     },
     totalPrice:{
         type:Number,
+
         required:true,
     },
     paymentMethod: {
@@ -31,8 +34,8 @@ const ticketSchema= new mongoose.Schema({
 },
     paymentStatus:{
         type:String,
-        enum:["pending","completed","failed","cancelled"],
-        default:"pending",
+        enum:["PENDING","COMPLETED","FAILED","CANCELLED"],
+        default:"PENDING",
         required:true
 
     },
