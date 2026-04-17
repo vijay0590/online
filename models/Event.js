@@ -50,6 +50,10 @@ const eventSchema = new mongoose.Schema(
             }
         }
     ],
+    category:{
+        type:String,
+        required:true
+    },
 
     images: [
         {

@@ -39,4 +39,20 @@ const updateProfile=async(req,res)=>{
        
          }
 };
-module.exports={getMyProfile,updateProfile}
+const updateUserRole=async(req,res)=>{
+    try{
+        const{role}=req.body;
+        const user = await User.findByIdAndUpdate(req.params.id,
+            {role},
+            {new:true}
+        )
+        if(!user){
+            return res.status(403).json("user not found")
+        }
+        res.status(200).json("user updated succesfully")
+            
+    }catch(error){
+        res.status(500).json("server error")
+    }
+}
+module.exports={getMyProfile,updateProfile,updateUserRole}

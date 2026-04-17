@@ -16,7 +16,7 @@ const bookTicket=async(req,res)=>{
         return res.status(404).json({message:"event not found"})
      }
      //check event is approved
-     if(event.status !== "approved"){
+     if(event.status !== "APPROVED"){
         return res.status(400).json({message:"event not available for booking"})
      }
      //find selected ticket type
@@ -35,10 +35,14 @@ const bookTicket=async(req,res)=>{
         ticketType,
         quantity,
         paymentMethod,
-        totalPrice
+        totalPrice,
+         razorpay_payment_id: req.body.razorpay_payment_id, 
+  razorpay_order_id: req.body.razorpay_order_id,   
+  paymentStatus:"PENDING"
      });
+  
 
-     res.status(201).json({message:"Ticket booked succefully(payment pending)",
+     res.status(201).json({message:"Ticket booked succefully",
         ticket
         
      });
@@ -58,37 +62,41 @@ const getMyTickets=async(req,res)=>{
 
     }
 };
-const confirmPayment=async(req,res)=>{
-    try{
-        const {ticketId}=req.body;
-        const ticket = await Ticket.findById(ticketId)
-        if(!ticket){
-            return res.status(404).json({message:"ticket not found"})
-        }
-        //only owner can confirm
-        if(ticket.user.toString()!==req.user._id.toString()){
-            return res.status(403).json({message:"not authorised"})
-        }
-        //update payment status
-        ticket.paymentStatus="completed"
-        await ticket.save();
-         //send email
-        const user = await User.findById(ticket.user);
+const confirmPayment = async (req, res) => {
+  try {
+    const { ticketId, razorpay_payment_id, razorpay_order_id } = req.body;
 
-         await sendEmail(
-         user.email,
-          "Ticket Confirmation",
-          `Your ticket for event is confirmed. Quantity: ${ticket.quantity}`
-          );
-        res.json({message:"payment succesful",ticket,})
-       
-
-    }catch(error){
-        res.status(500).json({message:error.message})
-
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: "ticket not found" });
     }
-};
 
+    if (ticket.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "not authorised" });
+    }
+
+    // UPDATE PAYMENT
+    ticket.paymentStatus = "COMPLETED";
+    ticket.razorpay_payment_id = razorpay_payment_id;
+    ticket.razorpay_order_id = razorpay_order_id;
+
+    await ticket.save();
+
+    // SEND EMAIL
+    const user = await User.findById(ticket.user);
+
+    await sendEmail(
+      user.email,
+      "Ticket Confirmation",
+      `Your ticket is confirmed 🎉\nQuantity: ${ticket.quantity}`
+    );
+
+    res.json({ message: "payment successful", ticket });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 // CANCEL TICKET
 const cancelTicket = async (req, res) => {
   try {
@@ -104,12 +112,12 @@ const cancelTicket = async (req, res) => {
     }
 
     // Check if already cancelled
-    if (ticket.paymentStatus === "cancelled") {
+    if (ticket.paymentStatus === "CANCELLED") {
       return res.status(400).json({ message: "Ticket already cancelled" });
     }
 
     // Update status
-    ticket.paymentStatus = "cancelled";
+    ticket.paymentStatus = "CANCELLED";
     await ticket.save();
 
     res.json({

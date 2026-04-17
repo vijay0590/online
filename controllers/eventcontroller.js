@@ -13,7 +13,12 @@ const createEvent = async (req, res) => {
             location,
             category,
             ticketTypes,
+            schedule
         } = req.body;
+        
+        if (schedule && typeof schedule === "string") {
+      schedule = JSON.parse(schedule);
+        }
         if (typeof ticketTypes === "string") {
             ticketTypes = JSON.parse(ticketTypes);
         };
@@ -35,6 +40,7 @@ const createEvent = async (req, res) => {
             location,
             category,
             ticketTypes,
+            schedule,
             images: imagePath ? [imagePath] : [],
             organiser: req.user._id,
         });
@@ -102,40 +108,48 @@ const getEventById = async (req, res) => {
 //update event
 const updateEvent = async (req, res) => {
     try {
-        const event = await Event.findById(req.params.id)
+        const event = await Event.findById(req.params.id);
 
         if (!event) {
-            return res.status(404).json({ message: "No event fount" });
+            return res.status(404).json({ message: "No event found" });
         }
-            //check ownership or admin
-            if (
-                event.organiser.toString() !== req.user._id.toString() &&
-                req.user.role !== "admin"
-            ){
 
-               return  res.status(403).json({ message: "not authorized to update this event" })
+        if (
+            event.organiser.toString() !== req.user._id.toString() &&
+            req.user.role !== "admin"
+        ) {
+            return res.status(403).json({ message: "Not authorized" });
         }
-        //parse tickets
-          if (req.body.ticketTypes && typeof req.body.ticketTypes === "string") {
-            req.body.ticketTypes = JSON.parse(req.body.ticketTypes);
+
+        let updateData = { ...req.body };
+
+        // parse schedule
+        if (req.body.schedule && typeof req.body.schedule === "string") {
+            updateData.schedule = JSON.parse(req.body.schedule);
         }
-        //image upload
+
+        // parse ticketTypes
+        if (req.body.ticketTypes && typeof req.body.ticketTypes === "string") {
+            updateData.ticketTypes = JSON.parse(req.body.ticketTypes);
+        }
+
+    
         if (req.file) {
-            req.body.images = [`/uploads/${req.file.filename}`];
+            updateData.images = [`/uploads/${req.file.filename}`];
         }
-        //updated event
+
         const updatedEvent = await Event.findByIdAndUpdate(
             req.params.id,
-            req.body,
-            { new: true,runValidators:true }
-        )
-        res.json({ message: "updated event successfully", event: updatedEvent })
+            { $set: updateData },
+            { new: true, runValidators: true }
+        );
+
+        res.json({ message: "Event updated successfully", event: updatedEvent });
 
     } catch (error) {
-        res.status(500).json({ message: error.message })
-
+        console.log(error); 
+        res.status(500).json({ message: error.message });
     }
-
 };
 const deleteEvent = async (req, res) => {
     try {
@@ -262,11 +276,23 @@ const updateEventStatus=async(req,res)=>{
         
     }
 }
+//pending events
+const getPendingEvents = async (req, res) => {
+  try {
+    const events = await Event.find({ status: "PENDING" })
+      .populate("organiser", "name email")
+      .sort({ createdAt: -1 });
+
+    res.json({ events });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 
 
 module.exports = {
     createEvent, getEvents, getEventById, updateEvent,
     deleteEvent, updateEventSchedule, getEventAttendees,
-    getMyEvents,exportAttendees,updateEventStatus,
+    getMyEvents,exportAttendees,updateEventStatus,getPendingEvents,
 };

@@ -12,6 +12,19 @@ const getAllUsers=async(req,res)=>{
     }
 
 };
+//delete users
+const deleteUser=async(req,res)=>{
+    try{
+        const user= await User.findByIdAndDelete(req.params.id);
+        if(!user){
+            return res.staus(404).json("user not found")
+        }
+        res.status(200).json({message:"user deleted succesfully"})
+    }catch(error){
+        console.log(error.message)
+    }
+
+}
 //get all tickets
 const getAllTickets=async(req,res)=>{
     try{
@@ -71,4 +84,4 @@ const revenueData=await Ticket.aggregate([
 
    }
 }
-module.exports={getAllUsers,getAllTickets,paymentStats,getAdminStats};
+module.exports={getAllUsers,getAllTickets,paymentStats,getAdminStats,deleteUser};

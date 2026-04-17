@@ -6,6 +6,7 @@ const ticketRoutes = require("./routes/ticketRoutes");
 const analyticsRoutes=require("./routes/analyticsRoutes");
 const adminRoutes=require("./routes/adminRoutes");
 const userRoutes=require("./routes/userRoutes")
+const paymentRoutes=require("./routes/paymentRoutes")
 
 
 
@@ -21,6 +22,7 @@ app.use("/api/tickets",ticketRoutes)
 app.use("/api/analytics",analyticsRoutes)
 app.use("/api/admin",adminRoutes)
 app.use("/api/users",userRoutes)
+app.use("/api/payment",paymentRoutes)
 //img uploads
 app.use("/uploads",express.static("uploads"))
 
