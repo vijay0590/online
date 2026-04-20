@@ -61,11 +61,13 @@ npm install
 
 ### 2. Create `.env`
 
-```env
 PORT=3001
-MONGODB_URI=your_mongodb_url
-JWT_SECRET=your_secret
-```
+MONGODB_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret
+EMAIL_USER=your_gmail@gmail.com
+EMAIL_PASS=your_gmail_app_password
+RAZORPAY_KEY=rzp_test_xxxxxxxxxxxx
+RAZORPAY_SECRET=xxxxxxxxxxxxxxxxxxxx
 
 ### 3. Run server
 
