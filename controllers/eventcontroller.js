@@ -84,8 +84,20 @@ const getEvents = async (req, res) => {
         const events = await Event.find(query)
             .populate("organiser", "name email")
             .sort({ createdAt: -1 });
-        //response
-        res.status(200).json({ count: events.length, events })
+           const updatedEvents = events.map(event => {
+  return {
+    ...event._doc,
+    images: event.images.map(img =>
+      `${req.protocol}://${req.get("host")}${img}`
+    )
+  };
+});
+
+//response
+res.status(200).json({
+  count: updatedEvents.length,
+  events: updatedEvents
+});
 
 
     } catch (error) {
