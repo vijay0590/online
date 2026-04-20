@@ -1,7 +1,8 @@
 const express=require('express');
 const router=express.Router();
 const {createEvent,getEvents,updateEvent,deleteEvent,updateEventSchedule,
-    getEventAttendees, getEventById,getMyEvents,exportAttendees,updateEventStatus,getPendingEvents}=require("../controllers/eventController")
+    getEventAttendees, getEventById,getMyEvents,exportAttendees,
+    updateEventStatus,getPendingEvents}=require("../controllers/eventcontroller")
 const {protect,authorizeRoles}=require("../middleware/auth");
 const upload=require("../middleware/uploadMiddleware")
 //create event with image uploads
