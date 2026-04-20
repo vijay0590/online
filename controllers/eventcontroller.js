@@ -197,7 +197,7 @@ const getEventAttendees = async (req, res) => {
         const eventId = req.params.id;
         const tickets = await Ticket.find({
             event: eventId,
-            paymentStatus: "completed"
+            paymentStatus: "COMPLETED"
         })
             .populate("user", "name email")
             .select("user quantity")
@@ -230,7 +230,7 @@ const exportAttendees = async (req, res) => {
   try {
     const tickets = await Ticket.find({
       event: req.params.id,
-      paymentStatus: "approved", // IMPORTANT
+      paymentStatus: "COMPLETED", 
     }).populate("user", "name email");
 
     // CSV LOGIC

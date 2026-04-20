@@ -36,9 +36,13 @@ const ticketSchema = new mongoose.Schema(
     type: String,
     enum: ["PENDING", "COMPLETED", "FAILED", "CANCELLED"],
     default: "PENDING",
-  }
-
+   
+  },
+  paymentId:{
+    type:String
+  },
 },
+ 
 { timestamps: true }
 );
 

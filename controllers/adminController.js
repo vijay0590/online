@@ -28,9 +28,10 @@ const deleteUser=async(req,res)=>{
 //get all tickets
 const getAllTickets=async(req,res)=>{
     try{
-        const tickets=await Ticket.find()
+        const tickets=await Ticket.find({paymentStatus:"completed"})  
         .populate("user","name email")
-        .populate("event","title date");
+        .populate("event","title date")
+        .select("user event totalPrice paymentId paymentStatus createdAt")
 
         res.json({count:tickets.length,tickets});
 
@@ -64,7 +65,7 @@ const totalUsers=await User.countDocuments();
 const totalEvents=await Event.countDocuments();
 const revenueData=await Ticket.aggregate([
     {
-        $match:{paymentStatus:"completed"}
+        $match:{paymentStatus:"COMPLETED"}
     },
     {
         $group:{
@@ -84,4 +85,16 @@ const revenueData=await Ticket.aggregate([
 
    }
 }
-module.exports={getAllUsers,getAllTickets,paymentStats,getAdminStats,deleteUser};
+const getAllTransactions = async (req, res) => {
+  try {
+    const transactions = await Ticket.find()
+      .populate("user", "name email")
+      .populate("event", "title date")
+      .sort({ createdAt: -1 });
+
+    res.json(transactions);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+module.exports={getAllUsers,getAllTickets,paymentStats,getAdminStats,deleteUser,getAllTransactions};

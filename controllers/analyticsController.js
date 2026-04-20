@@ -19,7 +19,7 @@ const getOverallAnalytics=async(req,res)=>{
                 $unwind:"$eventData"
             },
             {
-                $match:{paymentStatus:"completed",
+                $match:{paymentStatus:"COMPLETED",
                "eventData.organiser":req.user._id}
             },
             {
