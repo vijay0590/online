@@ -1,294 +1,240 @@
-const Event = require('../models/Event');
-const Ticket = require("../models/Ticket")
+const Event = require("../models/Event");
+const Ticket = require("../models/Ticket");
 
-
-//create event
+// =======================
+// CREATE EVENT
+// =======================
 const createEvent = async (req, res) => {
-    try {
-        let {
-            title,
-            description,
-            date,
-            time,
-            location,
-            category,
-            ticketTypes,
-            schedule
-        } = req.body;
-        
-        if (schedule && typeof schedule === "string") {
-      schedule = JSON.parse(schedule);
-        }
-        if (typeof ticketTypes === "string") {
-            ticketTypes = JSON.parse(ticketTypes);
-        };
-        ticketTypes = ticketTypes.map(t => ({
-            ...t,
-            type: t.type.toLowerCase()
-        }));
-        const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
-        if (!title || !description || !date || !time || !location || !ticketTypes || ticketTypes.length == 0) {
-            return res.status(400).json({ message: "All fields required" })
-        }
-        //create event
-        const event = await Event.create({
-
-            title,
-            description,
-            date,
-            time,
-            location,
-            category,
-            ticketTypes,
-            schedule,
-            images: imagePath ? [imagePath] : [],
-            organiser: req.user._id,
-        });
-
-        //response
-        res.status(200).json({
-            message: "event created sucessfully(pending approval)",
-            event,
-        });
-
-    } catch (error) {
-        res.status(500).json({ message: error.message })
-    }
-
-
-}
-
-const getEvents = async (req, res) => {
-    try {
-        const { search, location, minPrice, maxPrice, date } = req.query;
-        let query = { status: "APPROVED" };
-        //search by title
-        if (search) {
-            query.title = { $regex: search, $options: "i" }
-        }
-        //filter by location
-        if (location) {
-            query.location = { $regex: location, $options: "i" }
-        }
-        //search by price
-        if (minPrice || maxPrice) {
-            query["ticketTypes.price"] = {};
-            if (minPrice) query["ticketTypes.price"].$gte = Number(minPrice)
-            if (maxPrice) query["ticketTypes.price"].$lte = Number(maxPrice)
-        }
-        //filter by date
-        if (date) {
-            query.date = new Date(date)
-        }
-
-        const events = await Event.find(query)
-            .populate("organiser", "name email")
-            .sort({ createdAt: -1 });
-           const updatedEvents = events.map(event => {
-  return {
-    ...event._doc,
-    images: event.images.map(img =>
-      `${req.protocol}://${req.get("host")}${img}`
-    )
-  };
-});
-
-//response
-res.status(200).json({
-  count: updatedEvents.length,
-  events: updatedEvents
-});
-
-
-    } catch (error) {
-        res.status(500).json({ message: error.message })
-    }
-}
-//get event by id
-const getEventById = async (req, res) => {
-    try {
-        const event = await Event.findById(req.params.id.trim())
-            .populate("organiser", "name email");
-        if (!event) {
-            return res.status(404).json({ message: "Event not found" });
-        }
-        res.status(200).json({ event });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-//update event
-const updateEvent = async (req, res) => {
-    try {
-        const event = await Event.findById(req.params.id);
-
-        if (!event) {
-            return res.status(404).json({ message: "No event found" });
-        }
-
-        if (
-            event.organiser.toString() !== req.user._id.toString() &&
-            req.user.role !== "admin"
-        ) {
-            return res.status(403).json({ message: "Not authorized" });
-        }
-
-        let updateData = { ...req.body };
-
-        // parse schedule
-        if (req.body.schedule && typeof req.body.schedule === "string") {
-            updateData.schedule = JSON.parse(req.body.schedule);
-        }
-
-        // parse ticketTypes
-        if (req.body.ticketTypes && typeof req.body.ticketTypes === "string") {
-            updateData.ticketTypes = JSON.parse(req.body.ticketTypes);
-        }
-
-    
-        if (req.file) {
-            updateData.images = [`/uploads/${req.file.filename}`];
-        }
-
-        const updatedEvent = await Event.findByIdAndUpdate(
-            req.params.id,
-            { $set: updateData },
-            { new: true, runValidators: true }
-        );
-
-        res.json({ message: "Event updated successfully", event: updatedEvent });
-
-    } catch (error) {
-        console.log(error); 
-        res.status(500).json({ message: error.message });
-    }
-};
-const deleteEvent = async (req, res) => {
-    try {
-        const event = await Event.findById(req.params.id)
-        if (!event) {
-            return res.status(404).json({ message: "not event found" })
-        }
-        // check ownership or admin
-        if (
-            event.organiser.toString() !== req.user._id.toString() &&
-            req.user.role !== "admin"
-        ) {
-            return res.status(403).json({ message: "not authorised to delete this event" })
-        }
-        await event.deleteOne();
-        res.json({ message: "event deleted succesfully" })
-
-    } catch (error) {
-        res.status(500).json({ message: error.message })
-    }
-};
-const updateEventSchedule = async (req, res) => {
-    try {
-        const { schedule } = req.body
-        const event = await Event.findById(req.params.id)
-        if (!event) {
-            return res.status(400).json({ message: "no event found" })
-        }
-        //chech ownership/admin
-        if (event.organiser.toString() !== req.user._id &&
-            req.user.role !== "admin") {
-            return res.status(403).json({ meassage: "not authorised" })
-        }
-        event.schedule = schedule;
-        await event.save();
-        res.json({ message: "event schedule updated", event })
-
-    } catch (error) {
-        res.status(500).json({ message: error.message })
-    }
-};
-//get attendees for event
-const getEventAttendees = async (req, res) => {
-    try {
-        const eventId = req.params.id;
-        const tickets = await Ticket.find({
-            event: eventId,
-            paymentStatus: "COMPLETED"
-        })
-            .populate("user", "name email")
-            .select("user quantity")
-        const attendees = tickets.map((t) => ({
-            id:t._id,
-            name: t.user.name,
-            email: t.user.email,
-            tickets: t.quantity
-
-        }))
-        res.json({ count: attendees.length, attendees })
-    } catch (error) {
-        res.status(500).json({ message: error.message })
-    }
-}
-//  get my events
-const getMyEvents = async (req, res) => {
-    try {
-        const events = await Event.find({ organiser: req.user._id })
-            .sort({ createdAt: -1 });
-
-        res.json({ count: events.length, events });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-
-const exportAttendees = async (req, res) => {
   try {
-    const tickets = await Ticket.find({
-      event: req.params.id,
-      paymentStatus: "COMPLETED", 
-    }).populate("user", "name email");
+    let {
+      title,
+      description,
+      date,
+      time,
+      location,
+      category,
+      ticketTypes,
+      schedule,
+    } = req.body;
 
-    // CSV LOGIC
-    let csv = "Name,Email,Tickets\n"; // header row
+    if (schedule && typeof schedule === "string") {
+      schedule = JSON.parse(schedule);
+    }
 
-    tickets.forEach((t) => {
-      const name = t.user?.name || "";
-      const email = t.user?.email || "";
-      const quantity = t.quantity || 0;
+    if (typeof ticketTypes === "string") {
+      ticketTypes = JSON.parse(ticketTypes);
+    }
 
-      csv += `${name},${email},${quantity}\n`;
+    // ✅ INIT AVAILABLE = TOTAL
+    ticketTypes = ticketTypes.map((t) => ({
+      ...t,
+      type: t.type.toLowerCase(),
+      available: t.total,
+    }));
+
+    const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+
+    if (!title || !description || !date || !time || !location || !ticketTypes?.length) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    const event = await Event.create({
+      title,
+      description,
+      date,
+      time,
+      location,
+      category,
+      ticketTypes,
+      schedule,
+      images: imagePath ? [imagePath] : [],
+      organiser: req.user._id,
     });
 
-    
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=attendees.csv"
-    );
+    res.json({
+      message: "Event created (pending approval)",
+      event,
+    });
 
-    res.status(200).send(csv);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
-//update event status
-const updateEventStatus=async(req,res)=>{
-    try{
-        const {status}=req.body;
-          // validate status
+
+// =======================
+// GET APPROVED EVENTS
+// =======================
+const getEvents = async (req, res) => {
+  try {
+    const events = await Event.find({ status: "APPROVED" })
+      .populate("organiser", "name email")
+      .sort({ createdAt: -1 });
+
+    res.json({ events });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// GET EVENT BY ID
+// =======================
+const getEventById = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id)
+      .populate("organiser", "name email");
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    res.json({ event });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// GET MY EVENTS
+// =======================
+const getMyEvents = async (req, res) => {
+  try {
+    const events = await Event.find({ organiser: req.user._id })
+      .sort({ createdAt: -1 });
+
+    res.json({ events });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// UPDATE EVENT
+// =======================
+const updateEvent = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    if (
+      event.organiser.toString() !== req.user._id.toString() &&
+      req.user.role !== "admin"
+    ) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    let updateData = { ...req.body };
+
+    if (req.body.schedule && typeof req.body.schedule === "string") {
+      updateData.schedule = JSON.parse(req.body.schedule);
+    }
+
+    if (req.body.ticketTypes && typeof req.body.ticketTypes === "string") {
+      updateData.ticketTypes = JSON.parse(req.body.ticketTypes);
+    }
+
+    // ✅ SAFE TICKET UPDATE
+    if (updateData.ticketTypes) {
+      updateData.ticketTypes = updateData.ticketTypes.map((newType, i) => {
+        const oldType = event.ticketTypes[i];
+        const sold = oldType.total - oldType.available;
+
+        if (newType.total < sold) {
+          throw new Error("Total cannot be less than sold tickets");
+        }
+
+        return {
+          ...newType,
+          type: newType.type.toLowerCase(),
+          available: newType.total - sold,
+        };
+      });
+    }
+
+    if (req.file) {
+      updateData.images = [`/uploads/${req.file.filename}`];
+    }
+
+    const updatedEvent = await Event.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    res.json({ message: "Event updated", event: updatedEvent });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// DELETE EVENT
+// =======================
+const deleteEvent = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    if (
+      event.organiser.toString() !== req.user._id.toString() &&
+      req.user.role !== "admin"
+    ) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    await event.deleteOne();
+
+    res.json({ message: "Event deleted" });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// UPDATE EVENT STATUS
+// =======================
+const updateEventStatus = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const { status } = req.body;
+
     if (!["APPROVED", "REJECTED"].includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
-        const event=await Event.findById(req.params.id)
-        if(!event){
-            return res.status(404).json("event not found")
-        }
-        event.status=status;
-        await event.save();
-        res.status(200).json({message:`event ${status}succecfully`,event})
-    }catch(error){
-        res.status(500).json({message:error.message})
-        
+
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
     }
-}
-//pending events
+
+    event.status = status;
+    await event.save();
+
+    res.json({ message: `Event ${status}`, event });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// GET PENDING EVENTS
+// =======================
 const getPendingEvents = async (req, res) => {
   try {
     const events = await Event.find({ status: "PENDING" })
@@ -296,15 +242,105 @@ const getPendingEvents = async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.json({ events });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
+// =======================
+// GET ALL EVENTS (ADMIN)
+// =======================
+const getAllEventsAdmin = async (req, res) => {
+  try {
+    const events = await Event.find()
+      .populate("organiser", "name email")
+      .sort({ createdAt: -1 });
 
+    res.json({ events });
 
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// UPDATE SCHEDULE
+// =======================
+const updateEventSchedule = async (req, res) => {
+  try {
+    const { schedule } = req.body;
+
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    event.schedule = schedule;
+    await event.save();
+
+    res.json({ message: "Schedule updated", event });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// GET ATTENDEES
+// =======================
+const getEventAttendees = async (req, res) => {
+  try {
+    const tickets = await Ticket.find({
+      event: req.params.id,
+      status: "BOOKED",
+    }).populate("user", "name email");
+
+    res.json({ attendees: tickets });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// EXPORT ATTENDEES
+// =======================
+const exportAttendees = async (req, res) => {
+  try {
+    const tickets = await Ticket.find({
+      event: req.params.id,
+      status: "BOOKED",
+    }).populate("user", "name email");
+
+    let csv = "Name,Email,Quantity\n";
+
+    tickets.forEach((t) => {
+      csv += `${t.user?.name},${t.user?.email},${t.quantity}\n`;
+    });
+
+    res.header("Content-Type", "text/csv");
+    res.attachment("attendees.csv");
+    res.send(csv);
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
 module.exports = {
-    createEvent, getEvents, getEventById, updateEvent,
-    deleteEvent, updateEventSchedule, getEventAttendees,
-    getMyEvents,exportAttendees,updateEventStatus,getPendingEvents,
+  createEvent,
+  getEvents,
+  getEventById,
+  getMyEvents,
+  updateEvent,
+  deleteEvent,
+  updateEventStatus,
+  getPendingEvents,
+  getAllEventsAdmin,
+  updateEventSchedule,
+  getEventAttendees,
+  exportAttendees,
 };

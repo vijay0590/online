@@ -31,7 +31,11 @@ const ticketSchema = new mongoose.Schema(
     type: Number,
     required: true,
   },
-
+status: {
+  type: String,
+  enum: ["BOOKED", "CANCELLED", "USED"],
+  default: "BOOKED"
+},
   paymentStatus: {
     type: String,
     enum: ["PENDING", "COMPLETED", "FAILED", "CANCELLED"],

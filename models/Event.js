@@ -47,7 +47,19 @@ const eventSchema = new mongoose.Schema(
             price: {
                 type: Number,
                 required: true
-            }
+            },
+              total: {      
+      type: Number,
+      required: true
+    },
+    available: {        
+      type: Number,
+      required: true
+    },
+             available: {              
+      type: Number,
+      required: true
+    }
         }
     ],
     category:{
@@ -70,7 +82,8 @@ const eventSchema = new mongoose.Schema(
     status: {
         type: String,
         enum: ["PENDING", "APPROVED", "REJECTED"],
-        default: "PENDING"
+        default: "PENDING",
+          index: true 
     }
 
 },

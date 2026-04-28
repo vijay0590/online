@@ -1,30 +1,86 @@
-const express=require('express');
-const router=express.Router();
-const {createEvent,getEvents,updateEvent,deleteEvent,updateEventSchedule,
-    getEventAttendees, getEventById,getMyEvents,exportAttendees,
-    updateEventStatus,getPendingEvents}=require("../controllers/eventcontroller")
-const {protect,authorizeRoles}=require("../middleware/auth");
-const upload=require("../middleware/uploadMiddleware")
-//create event with image uploads
-router.post("/",protect,authorizeRoles("organiser"),upload.single("image"),createEvent);
-//public routes
-router.get("/",getEvents)
-//pending event status
-router.get("/pending", protect, authorizeRoles("admin"), getPendingEvents);
-//get my events
-router.get("/me", protect, authorizeRoles("organiser"), getMyEvents);
-//get eventbyid
-router.get("/:id",getEventById)
-//protected routes
-//updateEvent
-router.put("/:id",protect,upload.single("image"),updateEvent)
-//updateEvent status
-router.put("/:id/status",protect,authorizeRoles("admin"),updateEventStatus)
-//delete event
-router.delete("/:id",protect,deleteEvent)
-//update event schedule
-router.put("/:id/schedule",protect,updateEventSchedule);
-//get event attendees
-router.get("/:id/attendees",protect,authorizeRoles("admin","organiser"),getEventAttendees)
-router.get("/:id/attendees/export",protect,authorizeRoles("admin","organiser"),exportAttendees)
-module.exports=router;
+const express = require("express");
+const router = express.Router();
+
+const {
+  createEvent,
+  getEvents,
+  updateEvent,
+  deleteEvent,
+  updateEventSchedule,
+  getEventAttendees,
+  getEventById,
+  getMyEvents,
+  exportAttendees,
+  updateEventStatus,
+  getPendingEvents,
+  getAllEventsAdmin, // ✅ make sure you added this in controller
+} = require("../controllers/eventcontroller");
+
+const { protect, authorizeRoles } = require("../middleware/auth");
+const upload = require("../middleware/uploadMiddleware");
+
+// =======================
+// PUBLIC ROUTES
+// =======================
+router.get("/", getEvents);
+
+// =======================
+// ADMIN ROUTES
+// =======================
+router.get("/admin/pending", protect, authorizeRoles("admin"), getPendingEvents);
+
+router.get("/admin/all", protect, authorizeRoles("admin"), getAllEventsAdmin);
+
+router.put(
+  "/admin/:id/status",
+  protect,
+  authorizeRoles("admin"),
+  updateEventStatus
+);
+
+// =======================
+// ORGANISER ROUTES
+// =======================
+router.post(
+  "/",
+  protect,
+  authorizeRoles("organiser"),
+  upload.single("image"),
+  createEvent
+);
+
+router.get("/me", protect, authorizeRoles("organiser"),getMyEvents);
+
+// =======================
+// ATTENDEES (ADMIN + ORGANISER)
+// =======================
+router.get(
+  "/:id/attendees",
+  protect,
+  authorizeRoles("admin", "organiser"),
+  getEventAttendees
+);
+
+router.get(
+  "/:id/attendees/export",
+  protect,
+  authorizeRoles("admin", "organiser"),
+  exportAttendees
+);
+
+
+// =======================
+// GENERAL ROUTES
+// =======================
+router.get("/:id", getEventById);
+
+// =======================
+// PROTECTED ROUTES
+// =======================
+router.put("/:id", protect, upload.single("image"), updateEvent);
+
+router.delete("/:id", protect, deleteEvent);
+
+router.put("/:id/schedule", protect, updateEventSchedule);
+
+module.exports = router;

@@ -20,7 +20,6 @@ const createOrder=async(req,res)=>{
      res.status(500).json({ message: "Order creation failed" });
 }
 
-
 }
 //verify payment
 const verifyPayment=async(req,res)=>{
