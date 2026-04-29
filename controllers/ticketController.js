@@ -178,7 +178,7 @@ const cancelTicket = async (req, res) => {
       return res.status(400).json({ message: "Ticket already cancelled" });
     }
 
-    / Update ticket status
+    // Update ticket status
     ticket.status = "CANCELLED";
     await ticket.save();
 
