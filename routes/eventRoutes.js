@@ -13,7 +13,7 @@ const {
   exportAttendees,
   updateEventStatus,
   getPendingEvents,
-  getAllEventsAdmin, // ✅ make sure you added this in controller
+  getAllEventsAdmin, 
 } = require("../controllers/eventcontroller");
 
 const { protect, authorizeRoles } = require("../middleware/auth");

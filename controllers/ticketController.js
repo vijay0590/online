@@ -16,7 +16,7 @@ const bookTicket = async (req, res) => {
     }
  //user check
     if (req.user.role !== "user") {
-  return res.status(403).json({ message: "Admins cannot book tickets" });
+  return res.status(403).json({ message: "Only users can book tickets" });
 }
     // Find event
     const event = await Event.findById(eventId);
@@ -55,7 +55,7 @@ const bookTicket = async (req, res) => {
       quantity,
       paymentMethod,
       totalPrice,
-      status: "PENDING",
+      status: "BOOKED",
       paymentStatus: "PENDING",
       razorpay_payment_id: req.body.razorpay_payment_id,
       razorpay_order_id: req.body.razorpay_order_id,
@@ -158,27 +158,49 @@ const cancelTicket = async (req, res) => {
   try {
     const ticket = await Ticket.findById(req.params.id);
 
+    // ❌ Ticket not found
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found" });
     }
 
-    // Ownership check
+    // ❌ Ownership check
     if (ticket.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Only paid tickets can be cancelled
+    // ❌ Only paid tickets can be cancelled
     if (ticket.paymentStatus !== "COMPLETED") {
       return res.status(400).json({ message: "Cannot cancel unpaid ticket" });
     }
 
-    // Prevent double cancel
+    // ❌ Prevent double cancel
     if (ticket.status === "CANCELLED") {
       return res.status(400).json({ message: "Ticket already cancelled" });
     }
 
+    / Update ticket status
     ticket.status = "CANCELLED";
     await ticket.save();
+
+    // Restore ticket availability
+    const event = await Event.findById(ticket.event);
+
+    if (event) {
+      const selectedType = event.ticketTypes.find(
+        (t) => t.type === ticket.ticketType
+      );
+
+      if (selectedType) {
+        selectedType.available += ticket.quantity;
+
+        // 🔥 safety: don't exceed total
+        if (selectedType.available > selectedType.total) {
+          selectedType.available = selectedType.total;
+        }
+
+        await event.save();
+      }
+    }
 
     res.json({
       message: "Ticket cancelled successfully",
@@ -186,10 +208,10 @@ const cancelTicket = async (req, res) => {
     });
 
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
-
 // =======================
 // TRANSFER TICKET
 // =======================

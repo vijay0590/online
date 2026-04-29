@@ -25,7 +25,7 @@ const createEvent = async (req, res) => {
       ticketTypes = JSON.parse(ticketTypes);
     }
 
-    // ✅ INIT AVAILABLE = TOTAL
+    //  INIT AVAILABLE = TOTAL
     ticketTypes = ticketTypes.map((t) => ({
       ...t,
       type: t.type.toLowerCase(),
@@ -122,6 +122,7 @@ const updateEvent = async (req, res) => {
       return res.status(404).json({ message: "Event not found" });
     }
 
+    //  Authorization
     if (
       event.organiser.toString() !== req.user._id.toString() &&
       req.user.role !== "admin"
@@ -131,20 +132,27 @@ const updateEvent = async (req, res) => {
 
     let updateData = { ...req.body };
 
+    //  Parse schedule
     if (req.body.schedule && typeof req.body.schedule === "string") {
       updateData.schedule = JSON.parse(req.body.schedule);
     }
 
+    //  Parse ticketTypes
     if (req.body.ticketTypes && typeof req.body.ticketTypes === "string") {
       updateData.ticketTypes = JSON.parse(req.body.ticketTypes);
     }
 
-    // ✅ SAFE TICKET UPDATE
+    //  SAFE TICKET UPDATE
     if (updateData.ticketTypes) {
       updateData.ticketTypes = updateData.ticketTypes.map((newType, i) => {
         const oldType = event.ticketTypes[i];
-        const sold = oldType.total - oldType.available;
 
+        const oldTotal = oldType?.total || 0;
+        const oldAvailable = oldType?.available ?? oldTotal; // 🔥 prevents NaN
+
+        const sold = oldTotal - oldAvailable;
+
+        //  Prevent reducing below sold tickets
         if (newType.total < sold) {
           throw new Error("Total cannot be less than sold tickets");
         }
@@ -152,11 +160,14 @@ const updateEvent = async (req, res) => {
         return {
           ...newType,
           type: newType.type.toLowerCase(),
-          available: newType.total - sold,
+          total: Number(newType.total),
+          price: Number(newType.price),
+          available: Number(newType.total) - sold,
         };
       });
     }
 
+    //  Image update
     if (req.file) {
       updateData.images = [`/uploads/${req.file.filename}`];
     }
@@ -167,13 +178,15 @@ const updateEvent = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    res.json({ message: "Event updated", event: updatedEvent });
+    res.json({
+      message: "Event updated successfully",
+      event: updatedEvent,
+    });
 
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
-
 // =======================
 // DELETE EVENT
 // =======================
@@ -238,16 +251,15 @@ const updateEventStatus = async (req, res) => {
 const getPendingEvents = async (req, res) => {
   try {
     const events = await Event.find({ status: "PENDING" })
-      .populate("organiser", "name email")
       .sort({ createdAt: -1 });
 
     res.json({ events });
 
   } catch (error) {
+    console.error("Pending error:", error);
     res.status(500).json({ message: error.message });
   }
 };
-
 // =======================
 // GET ALL EVENTS (ADMIN)
 // =======================
