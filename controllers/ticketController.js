@@ -79,7 +79,7 @@ const getMyTickets = async (req, res) => {
     const tickets = await Ticket.find({
       user: req.user._id,
     })
-      .populate("event", "title date time location price")
+      .populate("event", "title date time location price images")
       .sort({ createdAt: -1 });
 
     res.json({
@@ -158,22 +158,22 @@ const cancelTicket = async (req, res) => {
   try {
     const ticket = await Ticket.findById(req.params.id);
 
-    // ❌ Ticket not found
+    //  Ticket not found
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found" });
     }
 
-    // ❌ Ownership check
+    //  Ownership check
     if (ticket.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // ❌ Only paid tickets can be cancelled
+    // Only paid tickets can be cancelled
     if (ticket.paymentStatus !== "COMPLETED") {
       return res.status(400).json({ message: "Cannot cancel unpaid ticket" });
     }
 
-    // ❌ Prevent double cancel
+    //  Prevent double cancel
     if (ticket.status === "CANCELLED") {
       return res.status(400).json({ message: "Ticket already cancelled" });
     }
