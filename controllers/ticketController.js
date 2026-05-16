@@ -10,44 +10,42 @@ const bookTicket = async (req, res) => {
   try {
     const { eventId, quantity, ticketType, paymentMethod } = req.body;
 
-    // Validate
+    // Validate inputs
     if (!eventId || !quantity) {
       return res.status(400).json({ message: "eventId and quantity required" });
     }
- //user check
+
+    // Role verification
     if (req.user.role !== "user") {
-  return res.status(403).json({ message: "Only users can book tickets" });
-}
+      return res.status(403).json({ message: "Only users can book tickets" });
+    }
+
     // Find event
     const event = await Event.findById(eventId);
     if (!event) {
-      return res.status(404).json({ message: "event not found" });
+      return res.status(404).json({ message: "Event not found" });
     }
 
-    // Check approval
+    // Check approval status
     if (event.status !== "APPROVED") {
-      return res.status(400).json({ message: "event not available for booking" });
+      return res.status(400).json({ message: "Event not available for booking" });
     }
 
-    // Find ticket type
-    const selectedType = event.ticketTypes.find(
-      (t) => t.type === ticketType
-    );
-
+    // Find ticket type within array
+    const selectedType = event.ticketTypes.find((t) => t.type === ticketType);
     if (!selectedType) {
-      return res.status(404).json({ message: "invalid ticket type" });
+      return res.status(404).json({ message: "Invalid ticket type" });
     }
 
-    // Check availability
+    // Check temporary or immediate availability pool constraints
     if (selectedType.available < quantity) {
       return res.status(400).json({ message: "Not enough tickets available" });
     }
-   
 
-    // Total price
+    // Calculate dynamic total price
     const totalPrice = selectedType.price * quantity;
 
-    // Create ticket (PENDING until payment)
+    // Create tracking ticket document (Initial reservation state)
     const ticket = await Ticket.create({
       user: req.user._id,
       event: eventId,
@@ -55,14 +53,14 @@ const bookTicket = async (req, res) => {
       quantity,
       paymentMethod,
       totalPrice,
-      status: "BOOKED",
+      status: "PENDING", // Correct initialization state tracking
       paymentStatus: "PENDING",
       razorpay_payment_id: req.body.razorpay_payment_id,
       razorpay_order_id: req.body.razorpay_order_id,
     });
 
     res.status(201).json({
-      message: "Ticket created. Complete payment to confirm.",
+      message: "Ticket initialized. Complete payment validation to confirm seat allocations.",
       ticket,
     });
 
@@ -76,9 +74,7 @@ const bookTicket = async (req, res) => {
 // =======================
 const getMyTickets = async (req, res) => {
   try {
-    const tickets = await Ticket.find({
-      user: req.user._id,
-    })
+    const tickets = await Ticket.find({ user: req.user._id })
       .populate("event", "title date time location price images")
       .sort({ createdAt: -1 });
 
@@ -104,47 +100,52 @@ const confirmPayment = async (req, res) => {
 
     const ticket = await Ticket.findById(ticketId);
     if (!ticket) {
-      return res.status(404).json({ message: "ticket not found" });
+      return res.status(404).json({ message: "Ticket documentation not found" });
     }
 
+    // Tenant Access Protection Check
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "not authorised" });
+      return res.status(403).json({ message: "Not authorized to modify this resource" });
     }
 
-    // Prevent duplicate payment
+    // Block double execution workflows
     if (ticket.paymentStatus === "COMPLETED") {
-      return res.status(400).json({ message: "Payment already completed" });
+      return res.status(400).json({ message: "Payment tracking records show complete history already" });
     }
 
-    // Update payment + status
+    // Atomic Capacity Verification Guard Check
+    const event = await Event.findById(ticket.event);
+    if (!event) {
+      return res.status(404).json({ message: "Associated event model reference could not be located" });
+    }
+
+    const selectedType = event.ticketTypes.find((t) => t.type === ticket.ticketType);
+    if (!selectedType || selectedType.available < ticket.quantity) {
+      return res.status(400).json({ message: "The remaining ticket pool allocation was fully depleted before execution finalized" });
+    }
+
+    // Finalize state allocations
     ticket.paymentStatus = "COMPLETED";
     ticket.status = "BOOKED";
     ticket.razorpay_payment_id = razorpay_payment_id;
     ticket.razorpay_order_id = razorpay_order_id;
-
     await ticket.save();
 
-    // Reduce ticket availability ONLY AFTER PAYMENT
-    const event = await Event.findById(ticket.event);
-    const selectedType = event.ticketTypes.find(
-      (t) => t.type === ticket.ticketType
-    );
+    // Deduct standard capacity parameters from structural event layout
+    selectedType.available -= ticket.quantity;
+    await event.save();
 
-    if (selectedType) {
-      selectedType.available -= ticket.quantity;
-      await event.save();
+    // Outbound distribution receipt execution
+    const user = await User.findById(ticket.user);
+    if (user && user.email) {
+      await sendEmail(
+        user.email,
+        "Ticket Confirmation",
+        `Your ticket registration has been fully confirmed 🎉\nQuantity: ${ticket.quantity}\nTicket Category Type: ${ticket.ticketType}`
+      );
     }
 
-    // Send email
-    const user = await User.findById(ticket.user);
-
-    await sendEmail(
-      user.email,
-      "Ticket Confirmation",
-      `Your ticket is confirmed 🎉\nQuantity: ${ticket.quantity}`
-    );
-
-    res.json({ message: "payment successful", ticket });
+    res.json({ message: "Payment processed successfully and inventory updated", ticket });
 
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -158,60 +159,57 @@ const cancelTicket = async (req, res) => {
   try {
     const ticket = await Ticket.findById(req.params.id);
 
-    //  Ticket not found
     if (!ticket) {
-      return res.status(404).json({ message: "Ticket not found" });
+      return res.status(404).json({ message: "Ticket context could not be located" });
     }
 
-    //  Ownership check
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized" });
+      return res.status(403).json({ message: "Resource modification access rejected" });
     }
 
-    // Only paid tickets can be cancelled
-    if (ticket.paymentStatus !== "COMPLETED") {
-      return res.status(400).json({ message: "Cannot cancel unpaid ticket" });
-    }
-
-    //  Prevent double cancel
     if (ticket.status === "CANCELLED") {
-      return res.status(400).json({ message: "Ticket already cancelled" });
+      return res.status(400).json({ message: "Ticket entity historical states show cancel records already" });
     }
 
-    // Update ticket status
+    // Determine state structure properties
+    const wasPaidTicket = ticket.paymentStatus === "COMPLETED";
+
+    // Reassign context structural values safely
     ticket.status = "CANCELLED";
+    ticket.paymentStatus = "CANCELLED";
     await ticket.save();
 
-    // Restore ticket availability
-    const event = await Event.findById(ticket.event);
+    // INVENTORY RESTORATION: Run ONLY if the ticket was paid for and seats were subtracted
+    if (wasPaidTicket) {
+      const event = await Event.findById(ticket.event);
+      if (event) {
+        const selectedType = event.ticketTypes.find((t) => t.type === ticket.ticketType);
+        if (selectedType) {
+          selectedType.available += ticket.quantity;
 
-    if (event) {
-      const selectedType = event.ticketTypes.find(
-        (t) => t.type === ticket.ticketType
-      );
+          // Boundary constraint safety logic
+          if (selectedType.available > selectedType.total) {
+            selectedType.available = selectedType.total;
+          }
 
-      if (selectedType) {
-        selectedType.available += ticket.quantity;
-
-        // 🔥 safety: don't exceed total
-        if (selectedType.available > selectedType.total) {
-          selectedType.available = selectedType.total;
+          await event.save();
         }
-
-        await event.save();
       }
     }
 
     res.json({
-      message: "Ticket cancelled successfully",
+      message: wasPaidTicket 
+        ? "Ticket cancelled successfully and inventory seat pools restored." 
+        : "Unpaid temporary booking registration has been completely flushed out.",
       ticket,
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("Cancellation routing error:", error);
     res.status(500).json({ message: error.message });
   }
 };
+
 // =======================
 // TRANSFER TICKET
 // =======================
@@ -221,32 +219,28 @@ const transferTicket = async (req, res) => {
     const { newUserEmail } = req.body;
 
     const ticket = await Ticket.findById(ticketId);
-
     if (!ticket) {
-      return res.status(400).json({ message: "No ticket found" });
+      return res.status(404).json({ message: "No ticket tracking instance matches ID description" });
     }
 
-    // Ownership check
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorised" });
+      return res.status(403).json({ message: "Operation ownership credentials not verified" });
     }
 
-    // Only BOOKED tickets can be transferred
     if (ticket.status !== "BOOKED") {
-      return res.status(400).json({ message: "Only booked tickets can be transferred" });
+      return res.status(400).json({ message: "Only fully confirmed and paid ticket assets qualify for cross-profile assignments" });
     }
 
     const newUser = await User.findOne({ email: newUserEmail });
-
     if (!newUser) {
-      return res.status(400).json({ message: "No user found" });
+      return res.status(404).json({ message: "Destination recipient profile cannot be located by registration email tracking fields" });
     }
 
     ticket.user = newUser._id;
     await ticket.save();
 
     res.json({
-      message: "Ticket transferred successfully",
+      message: "Ticket property context successfully linked to new user registration profiles.",
       ticket,
     });
 
