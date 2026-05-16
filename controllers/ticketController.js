@@ -4,11 +4,11 @@ const User = require("../models/User");
 const sendEmail = require("../config/sendEmail");
 
 // =======================
-// BOOK TICKET
+// BOOK TICKET (Initialization Step)
 // =======================
 const bookTicket = async (req, res) => {
   try {
-    const { eventId, quantity, ticketType, paymentMethod } = req.body;
+    const { eventId, quantity, ticketType } = req.body;
 
     if (!eventId || !quantity || !ticketType) {
       return res.status(400).json({ message: "eventId, quantity, and ticketType are required" });
@@ -27,9 +27,11 @@ const bookTicket = async (req, res) => {
       return res.status(400).json({ message: "Event is not available for booking" });
     }
 
-    const selectedType = event.ticketTypes.find((t) => t.type === ticketType);
+    const selectedType = event.ticketTypes.find(
+      (t) => t.type.toLowerCase() === ticketType.toLowerCase()
+    );
     if (!selectedType) {
-      return res.status(404).json({ message: "Invalid ticket type" });
+      return res.status(404).json({ message: "Invalid ticket type selection" });
     }
 
     if (selectedType.available < quantity) {
@@ -38,22 +40,19 @@ const bookTicket = async (req, res) => {
 
     const totalPrice = selectedType.price * quantity;
 
-    // Create the ticket tracker as PENDING
+    // Create the initial baseline booking document marked as payment status PENDING
     const ticket = await Ticket.create({
       user: req.user._id,
       event: eventId,
-      ticketType,
+      ticketType: selectedType.type, // Preserve database case integrity
       quantity,
-      paymentMethod: paymentMethod || "razorpay",
       totalPrice,
-      status: "PENDING", 
-      paymentStatus: "PENDING",
-      razorpay_order_id: req.body.razorpay_order_id || "",
-      razorpay_payment_id: req.body.razorpay_payment_id || ""
+      status: "BOOKED", 
+      paymentStatus: "PENDING"
     });
 
     res.status(201).json({
-      message: "Ticket initialization successful.",
+      message: "Ticket initialized successfully. Complete payment integration verification.",
       ticket,
     });
 
@@ -63,29 +62,7 @@ const bookTicket = async (req, res) => {
 };
 
 // =======================
-// GET MY TICKETS
-// =======================
-const getMyTickets = async (req, res) => {
-  try {
-    const tickets = await Ticket.find({ user: req.user._id })
-      .populate("event", "title date time location price images")
-      .sort({ createdAt: -1 });
-
-    res.json({
-      total: tickets.length,
-      active: tickets.filter(t => t.status === "BOOKED").length,
-      cancelled: tickets.filter(t => t.status === "CANCELLED").length,
-      pending: tickets.filter(t => t.status === "PENDING").length,
-      tickets,
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// =======================
-// CONFIRM PAYMENT
+// CONFIRM PAYMENT (Secure Verification Step)
 // =======================
 const confirmPayment = async (req, res) => {
   try {
@@ -97,19 +74,18 @@ const confirmPayment = async (req, res) => {
 
     const ticket = await Ticket.findById(ticketId);
     if (!ticket) {
-      return res.status(404).json({ message: "Ticket record not found" });
+      return res.status(404).json({ message: "Ticket tracking record not found" });
     }
 
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to verify this transaction" });
+      return res.status(403).json({ message: "Not authorized to modify this resource" });
     }
 
     if (ticket.paymentStatus === "COMPLETED") {
-      return res.json({ message: "Payment already processed previously", ticket });
+      return res.json({ message: "Payment already processed", ticket });
     }
 
-    // 🔥 ATOMIC PROTECTION & BALANCED LOGIC LOGS
-    // Deducts availability AND increments the booked property at the exact same time
+    // 🔥 ATOMIC CONCURRENCY GUARD: Decrement available seats & increment booked count simultaneously
     const updatedEvent = await Event.findOneAndUpdate(
       {
         _id: ticket.event,
@@ -126,29 +102,56 @@ const confirmPayment = async (req, res) => {
     );
 
     if (!updatedEvent) {
+      // If the event layout update returns null, it means inventory dried up during the payment step
+      ticket.paymentStatus = "FAILED";
+      await ticket.save();
       return res.status(400).json({ 
-        message: "Tickets sold out while transaction was processing. Please contact support for an immediate refund." 
+        message: "Tickets sold out while transaction was processing. Contact support for a refund." 
       });
     }
 
-    // Finalize state values since database row allocations match up safely
+    // Finalize metrics on verified ticket document
     ticket.paymentStatus = "COMPLETED";
-    ticket.status = "BOOKED";
-    ticket.razorpay_payment_id = razorpay_payment_id;
-    ticket.razorpay_order_id = razorpay_order_id;
+    ticket.paymentId = razorpay_payment_id || "";
+    ticket.orderId = razorpay_order_id || "";
     await ticket.save();
 
-    // Dispatches verification email copies
+    // Dispatch mail confirmation copies
     const user = await User.findById(ticket.user);
     if (user && user.email) {
       await sendEmail(
         user.email,
-        "Ticket Confirmation",
-        `Your booking is confirmed! 🎉\nEvent Ticket: ${ticket.ticketType}\nQuantity: ${ticket.quantity}\nTotal Paid: ₹${ticket.totalPrice}`
+        "Ticket Confirmation Details",
+        `Your booking is confirmed! 🎉\nTicket Category: ${ticket.ticketType}\nQuantity: ${ticket.quantity}\nTotal Paid: ₹${ticket.totalPrice}`
       );
     }
 
-    res.json({ message: "Payment validated and booking finalized successfully", ticket });
+    res.json({ message: "Payment validated and tracking metrics synchronized.", ticket });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// =======================
+// GET MY TICKETS
+// =======================
+const getMyTickets = async (req, res) => {
+  try {
+    // Only fetch valid, completed bookings or user-canceled logs for their dashboard profile view
+    const tickets = await Ticket.find({ 
+      user: req.user._id,
+      paymentStatus: { $in: ["COMPLETED", "CANCELLED"] }
+    })
+      .populate("event", "title date time location price images")
+      .sort({ createdAt: -1 });
+
+    res.json({
+      total: tickets.length,
+      active: tickets.filter(t => t.status === "BOOKED" && t.paymentStatus === "COMPLETED").length,
+      cancelled: tickets.filter(t => t.status === "CANCELLED").length,
+      tickets,
+    });
 
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -163,15 +166,15 @@ const cancelTicket = async (req, res) => {
     const ticket = await Ticket.findById(req.params.id);
 
     if (!ticket) {
-      return res.status(404).json({ message: "Ticket details not found" });
+      return res.status(404).json({ message: "Ticket instance not found" });
     }
 
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to modify this resource" });
+      return res.status(403).json({ message: "Operation not authorized" });
     }
 
     if (ticket.status === "CANCELLED") {
-      return res.status(400).json({ message: "Ticket is already cancelled" });
+      return res.status(400).json({ message: "Ticket already marked cancelled" });
     }
 
     const wasPaid = ticket.paymentStatus === "COMPLETED";
@@ -180,7 +183,7 @@ const cancelTicket = async (req, res) => {
     ticket.paymentStatus = "CANCELLED";
     await ticket.save();
 
-    // If it was a paid booking, reverse allocations from both available and booked trackers
+    // Revert database seat positions only if original transaction cleared successfully
     if (wasPaid) {
       await Event.updateOne(
         { _id: ticket.event, "ticketTypes.type": ticket.ticketType },
@@ -196,7 +199,7 @@ const cancelTicket = async (req, res) => {
     res.json({
       message: wasPaid 
         ? "Ticket cancelled successfully and capacities restored." 
-        : "Unpaid temporary transaction record cancelled.",
+        : "Unpaid transaction record discarded.",
       ticket,
     });
 
@@ -215,29 +218,26 @@ const transferTicket = async (req, res) => {
 
     const ticket = await Ticket.findById(ticketId);
     if (!ticket) {
-      return res.status(404).json({ message: "Ticket asset not found" });
+      return res.status(404).json({ message: "Ticket record data asset missing" });
     }
 
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Operation not authorized" });
+      return res.status(403).json({ message: "Unauthorized action" });
     }
 
-    if (ticket.status !== "BOOKED") {
-      return res.status(400).json({ message: "Only fully paid and active tickets can be transferred" });
+    if (ticket.status !== "BOOKED" || ticket.paymentStatus !== "COMPLETED") {
+      return res.status(400).json({ message: "Only fully verified tickets can be transferred" });
     }
 
     const newUser = await User.findOne({ email: newUserEmail });
     if (!newUser) {
-      return res.status(404).json({ message: "Destination recipient user email not found" });
+      return res.status(404).json({ message: "Target user profile email structure not found" });
     }
 
     ticket.user = newUser._id;
     await ticket.save();
 
-    res.json({
-      message: "Ticket transfer processed successfully",
-      ticket,
-    });
+    res.json({ message: "Ticket transferred successfully", ticket });
 
   } catch (error) {
     res.status(500).json({ message: error.message });
