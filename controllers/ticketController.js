@@ -10,42 +10,35 @@ const bookTicket = async (req, res) => {
   try {
     const { eventId, quantity, ticketType, paymentMethod } = req.body;
 
-    // Validate inputs
     if (!eventId || !quantity) {
       return res.status(400).json({ message: "eventId and quantity required" });
     }
 
-    // Role verification
     if (req.user.role !== "user") {
       return res.status(403).json({ message: "Only users can book tickets" });
     }
 
-    // Find event
     const event = await Event.findById(eventId);
     if (!event) {
-      return res.status(404).json({ message: "Event not found" });
+      return res.status(404).json({ message: "event not found" });
     }
 
-    // Check approval status
     if (event.status !== "APPROVED") {
-      return res.status(400).json({ message: "Event not available for booking" });
+      return res.status(400).json({ message: "event not available for booking" });
     }
 
-    // Find ticket type within array
     const selectedType = event.ticketTypes.find((t) => t.type === ticketType);
     if (!selectedType) {
-      return res.status(404).json({ message: "Invalid ticket type" });
+      return res.status(404).json({ message: "invalid ticket type" });
     }
 
-    // Check temporary or immediate availability pool constraints
     if (selectedType.available < quantity) {
       return res.status(400).json({ message: "Not enough tickets available" });
     }
 
-    // Calculate dynamic total price
     const totalPrice = selectedType.price * quantity;
 
-    // Create tracking ticket document (Initial reservation state)
+    // Creates the initial ticket tracker as PENDING
     const ticket = await Ticket.create({
       user: req.user._id,
       event: eventId,
@@ -53,14 +46,14 @@ const bookTicket = async (req, res) => {
       quantity,
       paymentMethod,
       totalPrice,
-      status: "PENDING", // Correct initialization state tracking
+      status: "PENDING", 
       paymentStatus: "PENDING",
       razorpay_payment_id: req.body.razorpay_payment_id,
       razorpay_order_id: req.body.razorpay_order_id,
     });
 
     res.status(201).json({
-      message: "Ticket initialized. Complete payment validation to confirm seat allocations.",
+      message: "Ticket created. Complete payment to confirm.",
       ticket,
     });
 
@@ -92,7 +85,7 @@ const getMyTickets = async (req, res) => {
 };
 
 // =======================
-// CONFIRM PAYMENT
+// CONFIRM PAYMENT (FIXED FOR RACE CONDITIONS)
 // =======================
 const confirmPayment = async (req, res) => {
   try {
@@ -100,52 +93,56 @@ const confirmPayment = async (req, res) => {
 
     const ticket = await Ticket.findById(ticketId);
     if (!ticket) {
-      return res.status(404).json({ message: "Ticket documentation not found" });
+      return res.status(404).json({ message: "ticket not found" });
     }
 
-    // Tenant Access Protection Check
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to modify this resource" });
+      return res.status(403).json({ message: "not authorised" });
     }
 
-    // Block double execution workflows
     if (ticket.paymentStatus === "COMPLETED") {
-      return res.status(400).json({ message: "Payment tracking records show complete history already" });
+      return res.status(400).json({ message: "Payment already completed" });
     }
 
-    // Atomic Capacity Verification Guard Check
-    const event = await Event.findById(ticket.event);
-    if (!event) {
-      return res.status(404).json({ message: "Associated event model reference could not be located" });
+    // 🔥 FIX: ATOMIC INVENTORY REDUCTION & LOCK
+    // This updates the count directly in MongoDB ONLY if there are enough seats left right now!
+    const updatedEvent = await Event.findOneAndUpdate(
+      {
+        _id: ticket.event,
+        "ticketTypes.type": ticket.ticketType,
+        "ticketTypes.available": { $gte: ticket.quantity } // Guard: Must be greater or equal to quantity
+      },
+      {
+        $inc: { "ticketTypes.$.available": -ticket.quantity } // Subtract seats safely
+      },
+      { new: true }
+    );
+
+    // If no event matches, it means tickets sold out while the user was paying
+    if (!updatedEvent) {
+      return res.status(400).json({ 
+        message: "Tickets sold out while transaction was processing. Contact support for refund." 
+      });
     }
 
-    const selectedType = event.ticketTypes.find((t) => t.type === ticket.ticketType);
-    if (!selectedType || selectedType.available < ticket.quantity) {
-      return res.status(400).json({ message: "The remaining ticket pool allocation was fully depleted before execution finalized" });
-    }
-
-    // Finalize state allocations
+    // Now update payment records safely since inventory is secure
     ticket.paymentStatus = "COMPLETED";
     ticket.status = "BOOKED";
     ticket.razorpay_payment_id = razorpay_payment_id;
     ticket.razorpay_order_id = razorpay_order_id;
     await ticket.save();
 
-    // Deduct standard capacity parameters from structural event layout
-    selectedType.available -= ticket.quantity;
-    await event.save();
-
-    // Outbound distribution receipt execution
+    // Send confirmation mail
     const user = await User.findById(ticket.user);
     if (user && user.email) {
       await sendEmail(
         user.email,
         "Ticket Confirmation",
-        `Your ticket registration has been fully confirmed 🎉\nQuantity: ${ticket.quantity}\nTicket Category Type: ${ticket.ticketType}`
+        `Your ticket is confirmed 🎉\nQuantity: ${ticket.quantity}`
       );
     }
 
-    res.json({ message: "Payment processed successfully and inventory updated", ticket });
+    res.json({ message: "payment successful", ticket });
 
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -153,59 +150,49 @@ const confirmPayment = async (req, res) => {
 };
 
 // =======================
-// CANCEL TICKET
+// CANCEL TICKET (FIXED FOR UNPAID SYSTEM)
 // =======================
 const cancelTicket = async (req, res) => {
   try {
     const ticket = await Ticket.findById(req.params.id);
 
     if (!ticket) {
-      return res.status(404).json({ message: "Ticket context could not be located" });
+      return res.status(404).json({ message: "Ticket not found" });
     }
 
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Resource modification access rejected" });
+      return res.status(403).json({ message: "Not authorized" });
     }
 
     if (ticket.status === "CANCELLED") {
-      return res.status(400).json({ message: "Ticket entity historical states show cancel records already" });
+      return res.status(400).json({ message: "Ticket already cancelled" });
     }
 
-    // Determine state structure properties
-    const wasPaidTicket = ticket.paymentStatus === "COMPLETED";
+    // Check if the ticket was actually paid for
+    const wasPaid = ticket.paymentStatus === "COMPLETED";
 
-    // Reassign context structural values safely
+    // Update ticket state values
     ticket.status = "CANCELLED";
     ticket.paymentStatus = "CANCELLED";
     await ticket.save();
 
-    // INVENTORY RESTORATION: Run ONLY if the ticket was paid for and seats were subtracted
-    if (wasPaidTicket) {
-      const event = await Event.findById(ticket.event);
-      if (event) {
-        const selectedType = event.ticketTypes.find((t) => t.type === ticket.ticketType);
-        if (selectedType) {
-          selectedType.available += ticket.quantity;
-
-          // Boundary constraint safety logic
-          if (selectedType.available > selectedType.total) {
-            selectedType.available = selectedType.total;
-          }
-
-          await event.save();
-        }
-      }
+    // 🔥 FIX: Only add seats back if the user originally paid for them!
+    if (wasPaid) {
+      await Event.updateOne(
+        { _id: ticket.event, "ticketTypes.type": ticket.ticketType },
+        { $inc: { "ticketTypes.$.available": ticket.quantity } }
+      );
     }
 
     res.json({
-      message: wasPaidTicket 
-        ? "Ticket cancelled successfully and inventory seat pools restored." 
-        : "Unpaid temporary booking registration has been completely flushed out.",
+      message: wasPaid 
+        ? "Ticket cancelled successfully and inventory restored." 
+        : "Unpaid reservation cancelled successfully.",
       ticket,
     });
 
   } catch (error) {
-    console.error("Cancellation routing error:", error);
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -220,27 +207,27 @@ const transferTicket = async (req, res) => {
 
     const ticket = await Ticket.findById(ticketId);
     if (!ticket) {
-      return res.status(404).json({ message: "No ticket tracking instance matches ID description" });
+      return res.status(400).json({ message: "No ticket found" });
     }
 
     if (ticket.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Operation ownership credentials not verified" });
+      return res.status(403).json({ message: "Not authorised" });
     }
 
     if (ticket.status !== "BOOKED") {
-      return res.status(400).json({ message: "Only fully confirmed and paid ticket assets qualify for cross-profile assignments" });
+      return res.status(400).json({ message: "Only booked tickets can be transferred" });
     }
 
     const newUser = await User.findOne({ email: newUserEmail });
     if (!newUser) {
-      return res.status(404).json({ message: "Destination recipient profile cannot be located by registration email tracking fields" });
+      return res.status(400).json({ message: "No user found" });
     }
 
     ticket.user = newUser._id;
     await ticket.save();
 
     res.json({
-      message: "Ticket property context successfully linked to new user registration profiles.",
+      message: "Ticket transferred successfully",
       ticket,
     });
 
