@@ -1,10 +1,10 @@
-const express =require("express")
-const router=express.Router();
-const {createOrder,verifyPayment}=require("../controllers/paymentController")
-const {protect}= require("../middleware/auth")
+const express = require("express");
+const router = express.Router();
 
-router.post("/create-order",protect,createOrder)
+const { createOrder } = require("../controllers/paymentController");
+const { protect } = require("../middleware/auth");
 
-router.post("/verify",protect, verifyPayment);
-module.exports=router;
+// CREATE RAZORPAY ORDER
+router.post("/create-order", protect, createOrder);
 
+module.exports = router;

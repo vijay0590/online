@@ -48,23 +48,20 @@ const eventSchema = new mongoose.Schema(
                 type: Number,
                 required: true
             },
-              total: {      
-      type: Number,
-      required: true
-    },
-    available: {        
-      type: Number,
-      required: true
-    },
-             available: {              
-      type: Number,
-      required: true
-    }
+            total: {      
+                type: Number,
+                required: true
+            },
+            available: {        
+                type: Number,
+                required: true
+            }
         }
     ],
+
     category:{
-        type:String,
-        required:true
+        type: String,
+        required: true
     },
 
     images: [
@@ -83,11 +80,11 @@ const eventSchema = new mongoose.Schema(
         type: String,
         enum: ["PENDING", "APPROVED", "REJECTED"],
         default: "PENDING",
-          index: true 
+        index: true 
     }
 
 },
-{ timestamps: true }   
+{ timestamps: true } 
 );
 
 module.exports = mongoose.model("Event", eventSchema);
